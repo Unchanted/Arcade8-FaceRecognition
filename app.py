@@ -1,8 +1,11 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify,render_template 
 import face_recognition
 import os
+from datetime import datetime
 
 app = Flask(__name__)
+
+attendance_records = {}
 
 def load_known_faces(directory):
     known_faces = []
@@ -18,7 +21,7 @@ def load_known_faces(directory):
 
     return known_faces, known_names
 
-def recognize_face(unknown_image, known_faces, known_names):
+def recognize_face(unknown_image, known_faces, known_namaes):
     unknown_encoding = face_recognition.face_encodings(unknown_image)
 
     if len(unknown_encoding) > 0:
@@ -38,21 +41,39 @@ known_faces, known_names = load_known_faces(known_faces_dir)
 
 @app.route('/recognize', methods=['POST'])
 def recognize():
-    if 'file' not in request.files:
+    print(request.files)
+
+    if '' in request.files:
+        file = request.files['']
+        
+        if file.filename == '':
+            return jsonify({"error": "No selected file"}), 400
+
+        if file:
+            try:
+                unknown_image = face_recognition.load_image_file(file)
+                result = recognize_face(unknown_image, known_faces, known_names)
+
+                update_attendance(result)
+
+                return jsonify({"result": result})
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
+    else:
         return jsonify({"error": "No file provided"}), 400
 
-    file = request.files['file']
+def update_attendance(name):
+    if name != "Unknown":
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        if name not in attendance_records:
+            attendance_records[name] = []
 
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
+        attendance_records[name].append(timestamp)
+@app.route('/view_records', methods=['GET'])
+def view_records():
+    return render_template('attendance_records.html', records=attendance_records)
 
-    if file:
-        try:
-            unknown_image = face_recognition.load_image_file(file)
-            result = recognize_face(unknown_image, known_faces, known_names)
-            return jsonify({"result": result})
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-
+    
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
